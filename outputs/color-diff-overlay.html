@@ -1,1 +1,2653 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>画像重ね合わせ色差チェッカー</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --line: #cfd7df;
+      --line-strong: #92a1af;
+      --text: #17202a;
+      --muted: #5e6b78;
+      --accent: #1871c9;
+      --accent-dark: #0f579b;
+      --warn: #a35b00;
+      --shadow: 0 10px 26px rgba(24, 38, 53, 0.10);
+      font-family: "Segoe UI", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: var(--left-panel-width, 320px) 6px minmax(220px, 1fr) 6px var(--right-panel-width, 360px);
+      height: 100dvh;
+      min-width: 636px;
+      overflow: hidden;
+    }
+
+    aside, main {
+      min-width: 0;
+      min-height: 0;
+    }
+
+    aside {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 8px 10px;
+      overflow: auto;
+    }
+
+    .results {
+      border-right: 0;
+      border-left: 1px solid var(--line);
+      display: grid;
+      grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .resizer {
+      position: relative;
+      z-index: 5;
+      background: #eef2f6;
+      cursor: col-resize;
+      touch-action: none;
+    }
+
+    .resizer::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 2px;
+      width: 2px;
+      background: #bac5cf;
+    }
+
+    .resizer:hover,
+    .resizer.active {
+      background: #d9e8f7;
+    }
+
+    .resizer:hover::before,
+    .resizer.active::before {
+      background: var(--accent);
+    }
+
+    body.resizing {
+      cursor: col-resize;
+      user-select: none;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 10px 0 5px;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    label {
+      display: block;
+      margin: 5px 0 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      max-width: 100%;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f9fbfd;
+      color: transparent;
+      font-size: 12px;
+    }
+
+    input[type="file"]::file-selector-button {
+      color: var(--text);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    input[type="number"] {
+      width: 100%;
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font: inherit;
+      font-size: 13px;
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 82px;
+      gap: 4px 7px;
+      align-items: center;
+    }
+
+    .section-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 10px 0 5px;
+    }
+
+    .section-toggle h2 {
+      margin: 0;
+    }
+
+    .toggle-btn {
+      width: 28px;
+      min-height: 26px;
+      padding: 2px 6px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .align-summary {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      margin: 0 0 6px;
+    }
+
+    .align-controls.collapsed {
+      display: none;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .compact-row {
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    button {
+      min-height: 28px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      padding: 4px 8px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    button:hover {
+      border-color: var(--accent-dark);
+    }
+
+    button.primary:hover {
+      background: var(--accent-dark);
+    }
+
+    .text-toggle {
+      min-height: auto;
+      margin: 2px 0 4px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      text-decoration: underline;
+    }
+
+    .text-toggle:hover {
+      color: var(--accent-dark);
+      border-color: transparent;
+    }
+
+    .stage-wrap {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto auto;
+      height: 100vh;
+      min-width: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfe;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .toolbar > .row,
+    .toolbar-actions {
+      flex: 0 0 auto;
+      gap: 5px;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .toolbar-separator {
+      width: 1px;
+      height: 20px;
+      margin: 0 2px;
+      background: var(--line);
+    }
+
+    .toolbar button {
+      min-width: 28px;
+      min-height: 26px;
+      padding: 3px 7px;
+    }
+
+    .status-line {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stage {
+      position: relative;
+      min-height: 0;
+      overflow: auto;
+      padding: 8px;
+      background:
+        linear-gradient(45deg, #dfe5eb 25%, transparent 25%),
+        linear-gradient(-45deg, #dfe5eb 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #dfe5eb 75%),
+        linear-gradient(-45deg, transparent 75%, #dfe5eb 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+    }
+
+    canvas {
+      display: block;
+      max-width: none;
+      background: transparent;
+      box-shadow: var(--shadow);
+      image-rendering: auto;
+      cursor: crosshair;
+    }
+
+    canvas.dragging {
+      cursor: grabbing;
+    }
+
+    .mode-image canvas {
+      cursor: move;
+    }
+
+    .mode-pan canvas {
+      cursor: grab;
+    }
+
+    .mode-point canvas {
+      cursor: crosshair;
+    }
+
+    .view-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      width: auto;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .view-controls button {
+      min-width: 28px;
+      min-height: 26px;
+      padding: 3px 6px;
+      font-size: 12px;
+    }
+
+    .aux-controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      min-height: 30px;
+      padding: 3px 8px;
+      border-top: 1px solid var(--line);
+      background: #f7f9fb;
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .aux-controls button {
+      min-height: 24px;
+      padding: 2px 7px;
+      font-size: 12px;
+    }
+
+    .zoom-readout {
+      min-width: 44px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .aux-label {
+      color: var(--muted);
+    }
+
+    .aux-separator {
+      width: 1px;
+      height: 18px;
+      margin: 0 2px;
+      background: var(--line);
+    }
+
+    .view-settings {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      z-index: 3;
+      width: min(360px, calc(100% - 16px));
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 4px 12px rgba(24, 38, 53, 0.12);
+      backdrop-filter: blur(4px);
+    }
+
+    .view-settings[hidden] {
+      display: none;
+    }
+
+    .view-settings-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 4px;
+    }
+
+    .settings-break {
+      flex-basis: 100%;
+      width: 0;
+      height: 0;
+    }
+
+    .view-settings-row button {
+      flex: 0 0 auto;
+      min-height: 26px;
+      padding: 3px 7px;
+      font-size: 12px;
+    }
+
+    .aori-btn.active {
+      border-color: var(--accent);
+      background: #e7f1fb;
+      color: var(--accent-dark);
+      font-weight: 600;
+    }
+
+    .aori-speed {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding-left: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+      flex: 0 0 158px;
+      min-width: 158px;
+    }
+
+    .aori-speed input {
+      flex: 0 0 72px;
+      width: 72px;
+    }
+
+    .aori-speed span {
+      display: inline-block;
+      width: 68px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .aori-badge {
+      display: none;
+      flex: 0 0 44px;
+      min-width: 44px;
+      padding: 3px 5px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .detail-toggle {
+      display: inline-flex;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f8fafc;
+    }
+
+    .detail-toggle button.active {
+      border-color: var(--accent);
+      background: #e7f1fb;
+      color: var(--accent-dark);
+      font-weight: 600;
+    }
+
+    .notes-panel {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .delta-strong {
+      font-weight: 700;
+      font-size: 13px;
+      color: #07111d;
+    }
+
+    .mode-btn.active {
+      border-color: var(--accent);
+      background: #e7f1fb;
+      color: var(--accent-dark);
+      font-weight: 600;
+    }
+
+    .hint {
+      padding: 5px 8px;
+      border-top: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    table {
+      width: auto;
+      border-collapse: collapse;
+      font-size: 12px;
+      min-width: 0;
+      table-layout: auto;
+    }
+
+    th, td {
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--line);
+      text-align: center;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--panel);
+      z-index: 1;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 21px;
+      height: 21px;
+      border: 1px solid rgba(0, 0, 0, 0.22);
+      border-radius: 4px;
+      vertical-align: middle;
+    }
+
+    .rgb-text,
+    .coord-text {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .threshold-note {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 6px 0 0;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin: 4px 0 4px;
+    }
+
+    .points-scroll {
+      min-height: 0;
+      overflow: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    .point-check {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+    }
+
+    .col-select {
+      width: 44px;
+    }
+
+    .col-no {
+      width: 34px;
+    }
+
+    .col-swatch {
+      width: 44px;
+    }
+
+    .col-delta {
+      min-width: 62px;
+      text-align: right;
+    }
+
+    .metric {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .metric b {
+      font-size: 14px;
+    }
+
+    .metric span {
+      color: var(--muted);
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 8px 0;
+    }
+
+    .warn {
+      color: var(--warn);
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 8px 0 0;
+    }
+
+    .progress {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      margin-top: 8px;
+      min-height: 16px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      margin-top: 8px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #e8edf2;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), #36a7a0);
+      transition: width 120ms ease-out;
+    }
+
+    .progress-track[hidden] {
+      display: none;
+    }
+
+    @media (max-width: 760px) {
+      aside {
+        padding: 10px;
+      }
+
+      .stage-wrap {
+        height: 100vh;
+      }
+
+      h1 {
+        font-size: 17px;
+      }
+
+      .control-grid {
+        grid-template-columns: 1fr 72px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>画像重ね合わせ色差チェッカー</h1>
+
+      <h2>画像</h2>
+      <label for="fileA">A画像（基準）</label>
+      <input id="fileA" type="file" accept="image/*,.tif,.tiff">
+      <label for="fileB">B画像（比較・重ねる画像）</label>
+      <input id="fileB" type="file" accept="image/*,.tif,.tiff">
+      <label for="sampleSize">色判定範囲 <span id="sampleSizeLabel">20×20 px</span></label>
+      <input id="sampleSize" type="range" min="1" max="200" step="1" value="20">
+
+      <div class="section-toggle">
+        <h2>B画像の位置合わせ</h2>
+        <button id="alignPanelToggle" class="toggle-btn" title="位置合わせメニューを折りたたむ">−</button>
+      </div>
+      <div id="alignSummary" class="align-summary"></div>
+      <div id="alignControls" class="align-controls">
+        <div class="control-grid">
+          <label for="offsetX">X移動 px</label>
+          <input id="offsetX" type="number" step="0.1" value="0">
+          <label for="offsetY">Y移動 px</label>
+          <input id="offsetY" type="number" step="0.1" value="0">
+          <label for="scale">X拡大率</label>
+          <input id="scale" type="number" step="0.001" value="1">
+          <label for="scaleY">Y拡大率</label>
+          <input id="scaleY" type="number" step="0.001" value="1">
+          <label for="rotation">回転 deg</label>
+          <input id="rotation" type="number" step="0.01" value="0">
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <button id="autoAlignBtn" class="primary">自動位置合わせ</button>
+      </div>
+      <div id="alignStatus" class="progress"></div>
+      <div id="alignProgressTrack" class="progress-track" hidden>
+        <div id="alignProgressFill" class="progress-fill"></div>
+      </div>
+
+      <h2>差分表示</h2>
+      <div class="control-grid">
+        <label for="diffThreshold">RGB差分しきい値</label>
+        <input id="diffThreshold" type="number" min="0" max="255" step="1" value="30">
+      </div>
+      <div class="row compact-row">
+        <button id="diffToggleBtn">差分表示</button>
+        <button id="diffPngBtn">差分PNG</button>
+      </div>
+
+      <h2>書き出し</h2>
+      <div class="row">
+        <button id="csvBtn" class="primary">CSV</button>
+        <button id="screenshotBtn">表示範囲PNG</button>
+        <button id="fullPngBtn">全体PNG</button>
+        <button id="saveProjectBtn">作業JSON保存</button>
+        <button id="loadProjectBtn">作業JSON読込</button>
+        <input id="projectFile" type="file" accept="application/json,.json" hidden>
+      </div>
+    </aside>
+
+    <div class="resizer" id="leftResizer" title="左パネル幅を調整"></div>
+
+    <main class="stage-wrap">
+      <div class="toolbar">
+        <div class="status" id="imageStatus">
+          <div class="status-line" title="未選択">A: 未選択</div>
+          <div class="status-line" title="未選択">B: 未選択</div>
+        </div>
+        <div class="toolbar-actions">
+          <button id="undoBtn" title="操作を戻す" disabled>戻す</button>
+          <button id="redoBtn" title="戻した操作を進める" disabled>進む</button>
+          <span class="toolbar-separator"></span>
+          <div class="view-controls" aria-label="表示操作">
+            <button id="imageModeBtn" class="mode-btn active" title="B画像をドラッグで移動">画像移動</button>
+            <button id="panModeBtn" class="mode-btn" title="表示位置をドラッグで移動">視点移動</button>
+            <button id="pointModeBtn" class="mode-btn" title="クリックで測定点を追加">点を打つ</button>
+            <button id="viewSettingsBtn" title="重ね表示・アオリ設定">表示設定▼</button>
+          </div>
+        </div>
+      </div>
+      <div class="stage" id="stage">
+        <div id="viewSettingsPanel" class="view-settings" hidden>
+          <div class="view-settings-row">
+          <button id="overlayModeBtn" class="aori-btn active" title="A画像にB画像を透明度付きで重ねて表示">重ね</button>
+          <label id="opacityControl" class="aori-speed" title="重ね表示のB画像透明度">
+            <span id="opacityLabel">透明度 100%</span>
+            <input id="opacity" type="range" min="0" max="1" step="0.01" value="1">
+          </label>
+          <button id="pointLabelsToggleBtn" class="aori-btn active" title="点番号の表示を切り替え">点番号</button>
+          <button id="sampleBoxesToggleBtn" class="aori-btn active" title="色判定範囲枠の表示を切り替え">判定範囲</button>
+          <span class="settings-break" aria-hidden="true"></span>
+          <button id="manualAoriBtn" class="aori-btn" title="クリックするたびにA画像/B画像を切り替え">手動アオリ</button>
+          <button id="autoAoriBtn" class="aori-btn" title="A画像/B画像を指定秒数ごとに自動切り替え">自動アオリ</button>
+          <label id="aoriIntervalControl" class="aori-speed" title="自動アオリの切り替え間隔" hidden>
+            <span id="aoriIntervalLabel">0.5秒</span>
+            <input id="aoriInterval" type="range" min="0.2" max="2" step="0.1" value="0.5">
+          </label>
+          <span id="aoriBadge" class="aori-badge">重ね</span>
+          </div>
+        </div>
+        <canvas id="canvas" width="1200" height="800"></canvas>
+      </div>
+      <div class="aux-controls" aria-label="補助操作">
+        <span class="zoom-readout" id="zoomPercent">100%</span>
+        <button id="viewResetBtn" title="全体表示">全体表示</button>
+        <button id="zoomOutBtn" title="表示を縮小">−</button>
+        <button id="zoomInBtn" title="表示を拡大">＋</button>
+        <span class="aux-separator"></span>
+        <span class="aux-label">B画像移動</span>
+        <button id="nudgeLeft" title="B画像を左へ">←</button>
+        <button id="nudgeUp" title="B画像を上へ">↑</button>
+        <button id="nudgeDown" title="B画像を下へ">↓</button>
+        <button id="nudgeRight" title="B画像を右へ">→</button>
+      </div>
+      <div class="hint">画像: ドラッグでB画像移動。矢印ボタンは1px移動、Shift+矢印で10px移動。視点: ドラッグで表示移動、ホイールで拡大縮小。点: クリックで測定点追加、ドラッグで視点移動。自動位置合わせはX/Y移動、X/Y拡大率、回転を小範囲で探索します。</div>
+    </main>
+
+    <div class="resizer" id="rightResizer" title="右パネル幅を調整"></div>
+
+    <aside class="results">
+      <h2>選択点の色差</h2>
+      <div class="result-actions">
+        <span class="detail-toggle">
+          <button id="simpleResultsBtn" class="active">簡易表示</button>
+          <button id="detailResultsBtn">詳細表示</button>
+        </span>
+        <button id="deleteSelectedBtn">選択点を削除</button>
+        <button id="selectAllPointsBtn">全選択</button>
+        <button id="clearPointSelectionBtn">全解除</button>
+      </div>
+      <button id="notesToggleBtn" class="text-toggle">計算条件</button>
+      <div id="notesPanel" class="notes-panel" hidden>ΔE00の目安: 1未満=ほぼ同等 / 1〜2=わずか / 2〜5=目視差あり / 5以上=大きい差。色差はRGB値を白背景合成してからsRGB→Labへ変換して計算します。ICCプロファイル変換なしのRGBベース計算のため、正式な測色値ではありません。</div>
+      <div id="summary" class="empty">まだ測定点がありません。</div>
+      <div class="points-scroll">
+        <table>
+          <thead id="pointsHead"></thead>
+          <tbody id="pointsBody"></tbody>
+        </table>
+      </div>
+    </aside>
+  </div>
+
+  <script src="utif.js"></script>
+  <script>
+    const state = {
+      a: null,
+      b: null,
+      fileNames: { a: "", b: "" },
+      aCanvas: document.createElement("canvas"),
+      bCanvas: document.createElement("canvas"),
+      points: [],
+      sampleSize: 20,
+      markers: { labels: true, sampleBoxes: true },
+      diff: { enabled: false, threshold: 30 },
+      resultView: "simple",
+      viewScale: 1,
+      interactionMode: "image",
+      aori: { mode: "overlay", frame: "a", interval: 0.5, timer: null },
+      workspace: { x: 0, y: 0, width: 1200, height: 800 },
+      transform: { x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1 },
+      history: { undo: [], redo: [], pending: null, restoring: false },
+      drag: null,
+      statusTimer: null
+    };
+
+    const els = {
+      canvas: document.getElementById("canvas"),
+      stage: document.getElementById("stage"),
+      fileA: document.getElementById("fileA"),
+      fileB: document.getElementById("fileB"),
+      sampleSize: document.getElementById("sampleSize"),
+      sampleSizeLabel: document.getElementById("sampleSizeLabel"),
+      projectFile: document.getElementById("projectFile"),
+      offsetX: document.getElementById("offsetX"),
+      offsetY: document.getElementById("offsetY"),
+      scale: document.getElementById("scale"),
+      scaleY: document.getElementById("scaleY"),
+      rotation: document.getElementById("rotation"),
+      opacity: document.getElementById("opacity"),
+      alignPanelToggle: document.getElementById("alignPanelToggle"),
+      alignControls: document.getElementById("alignControls"),
+      alignSummary: document.getElementById("alignSummary"),
+      autoAlignBtn: document.getElementById("autoAlignBtn"),
+      alignStatus: document.getElementById("alignStatus"),
+      alignProgressTrack: document.getElementById("alignProgressTrack"),
+      alignProgressFill: document.getElementById("alignProgressFill"),
+      undoBtn: document.getElementById("undoBtn"),
+      redoBtn: document.getElementById("redoBtn"),
+      zoomPercent: document.getElementById("zoomPercent"),
+      zoomOutBtn: document.getElementById("zoomOutBtn"),
+      zoomInBtn: document.getElementById("zoomInBtn"),
+      viewResetBtn: document.getElementById("viewResetBtn"),
+      viewSettingsBtn: document.getElementById("viewSettingsBtn"),
+      viewSettingsPanel: document.getElementById("viewSettingsPanel"),
+      imageModeBtn: document.getElementById("imageModeBtn"),
+      panModeBtn: document.getElementById("panModeBtn"),
+      pointModeBtn: document.getElementById("pointModeBtn"),
+      overlayModeBtn: document.getElementById("overlayModeBtn"),
+      manualAoriBtn: document.getElementById("manualAoriBtn"),
+      autoAoriBtn: document.getElementById("autoAoriBtn"),
+      opacityControl: document.getElementById("opacityControl"),
+      opacityLabel: document.getElementById("opacityLabel"),
+      aoriInterval: document.getElementById("aoriInterval"),
+      aoriIntervalControl: document.getElementById("aoriIntervalControl"),
+      aoriIntervalLabel: document.getElementById("aoriIntervalLabel"),
+      aoriBadge: document.getElementById("aoriBadge"),
+      pointLabelsToggleBtn: document.getElementById("pointLabelsToggleBtn"),
+      sampleBoxesToggleBtn: document.getElementById("sampleBoxesToggleBtn"),
+      leftResizer: document.getElementById("leftResizer"),
+      rightResizer: document.getElementById("rightResizer"),
+      deleteSelectedBtn: document.getElementById("deleteSelectedBtn"),
+      selectAllPointsBtn: document.getElementById("selectAllPointsBtn"),
+      clearPointSelectionBtn: document.getElementById("clearPointSelectionBtn"),
+      simpleResultsBtn: document.getElementById("simpleResultsBtn"),
+      detailResultsBtn: document.getElementById("detailResultsBtn"),
+      notesToggleBtn: document.getElementById("notesToggleBtn"),
+      notesPanel: document.getElementById("notesPanel"),
+      screenshotBtn: document.getElementById("screenshotBtn"),
+      fullPngBtn: document.getElementById("fullPngBtn"),
+      diffPngBtn: document.getElementById("diffPngBtn"),
+      saveProjectBtn: document.getElementById("saveProjectBtn"),
+      loadProjectBtn: document.getElementById("loadProjectBtn"),
+      diffToggleBtn: document.getElementById("diffToggleBtn"),
+      diffThreshold: document.getElementById("diffThreshold"),
+      status: document.getElementById("imageStatus"),
+      head: document.getElementById("pointsHead"),
+      body: document.getElementById("pointsBody"),
+      summary: document.getElementById("summary")
+    };
+
+    const ctx = els.canvas.getContext("2d", { willReadFrequently: true });
+
+    function captureHistoryState() {
+      ensureTransformNumbers();
+      ensureScaleAxes();
+      return {
+        transform: { ...state.transform },
+        points: state.points.map(point => ({
+          x: point.x,
+          y: point.y,
+          selected: !!point.selected
+        })),
+        sampleSize: getSampleSize(),
+        markers: { ...state.markers },
+        diff: { ...state.diff },
+        viewScale: state.viewScale,
+        scrollLeft: els.stage.scrollLeft,
+        scrollTop: els.stage.scrollTop
+      };
+    }
+
+    function historySignature(snapshot) {
+      return JSON.stringify(snapshot);
+    }
+
+    function updateHistoryButtons() {
+      els.undoBtn.disabled = !state.history.undo.length;
+      els.redoBtn.disabled = !state.history.redo.length;
+    }
+
+    function pushHistorySnapshot(snapshot) {
+      if (state.history.restoring || !snapshot) return;
+      const last = state.history.undo[state.history.undo.length - 1];
+      if (!last || historySignature(last) !== historySignature(snapshot)) {
+        state.history.undo.push(snapshot);
+        if (state.history.undo.length > 80) state.history.undo.shift();
+      }
+      state.history.redo = [];
+      updateHistoryButtons();
+    }
+
+    function rememberBeforeChange() {
+      pushHistorySnapshot(captureHistoryState());
+    }
+
+    function beginHistoryEdit() {
+      if (state.history.pending || state.history.restoring) return;
+      state.history.pending = captureHistoryState();
+    }
+
+    function commitHistoryEdit() {
+      if (!state.history.pending) return;
+      const pending = state.history.pending;
+      state.history.pending = null;
+      if (historySignature(pending) !== historySignature(captureHistoryState())) {
+        pushHistorySnapshot(pending);
+      }
+    }
+
+    function resetHistory() {
+      state.history.undo = [];
+      state.history.redo = [];
+      state.history.pending = null;
+      updateHistoryButtons();
+    }
+
+    function applyHistoryState(snapshot) {
+      state.history.restoring = true;
+      state.transform = { ...state.transform, ...(snapshot.transform || {}) };
+      ensureScaleAxes();
+      state.sampleSize = snapshot.sampleSize || 1;
+      state.markers = { labels: true, sampleBoxes: true, ...(snapshot.markers || {}) };
+      state.diff = { enabled: false, threshold: 30, ...(snapshot.diff || {}) };
+      state.viewScale = Number(snapshot.viewScale) || state.viewScale || 1;
+      state.points = (snapshot.points || []).map(point => {
+        const raw = { x: point.x, y: point.y, selected: !!point.selected };
+        return state.a && state.b ? recalculatePoint(raw) : raw;
+      });
+      syncControls();
+      updateSampleSizeLabel();
+      updateMarkerUi();
+      updateDiffUi();
+      draw();
+      renderPoints();
+      requestAnimationFrame(() => {
+        els.stage.scrollLeft = Number(snapshot.scrollLeft) || 0;
+        els.stage.scrollTop = Number(snapshot.scrollTop) || 0;
+      });
+      state.history.restoring = false;
+      updateHistoryButtons();
+    }
+
+    function undo() {
+      if (!state.history.undo.length) return;
+      const current = captureHistoryState();
+      const previous = state.history.undo.pop();
+      state.history.redo.push(current);
+      applyHistoryState(previous);
+    }
+
+    function redo() {
+      if (!state.history.redo.length) return;
+      const current = captureHistoryState();
+      const next = state.history.redo.pop();
+      state.history.undo.push(current);
+      applyHistoryState(next);
+    }
+
+    function isTiffFile(file) {
+      const name = file?.name?.toLowerCase() || "";
+      return name.endsWith(".tif") || name.endsWith(".tiff") || file?.type === "image/tiff";
+    }
+
+    async function loadTiffImage(file) {
+      if (!window.UTIF) throw new Error("TIFFを読むには utif.js が必要です。HTMLと同じフォルダに配置してください。");
+      const buffer = await file.arrayBuffer();
+      const ifds = UTIF.decode(buffer);
+      if (!ifds.length) throw new Error("TIFF画像を解析できませんでした。別形式に変換してから読み込んでください。");
+      UTIF.decodeImage(buffer, ifds[0]);
+      const rgba = UTIF.toRGBA8(ifds[0]);
+      const width = ifds[0].width;
+      const height = ifds[0].height;
+      if (!width || !height) throw new Error("TIFF画像のサイズを取得できませんでした。対応していないTIFF形式の可能性があります。");
+
+      const tiffCanvas = document.createElement("canvas");
+      tiffCanvas.width = width;
+      tiffCanvas.height = height;
+      const tiffCtx = tiffCanvas.getContext("2d", { willReadFrequently: true });
+      const imageData = tiffCtx.createImageData(width, height);
+      imageData.data.set(rgba);
+      tiffCtx.putImageData(imageData, 0, 0);
+      return loadImageSource(tiffCanvas.toDataURL("image/png"));
+    }
+
+    async function loadImage(file) {
+      if (isTiffFile(file)) return loadTiffImage(file);
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("画像を読み込めませんでした。対応形式はPNG/JPEG/WebP/GIF/BMP/TIFFです。"));
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    function loadImageSource(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    function applyImage(kind, img) {
+      state[kind] = img;
+      const off = kind === "a" ? state.aCanvas : state.bCanvas;
+      off.width = img.naturalWidth;
+      off.height = img.naturalHeight;
+      off.getContext("2d", { willReadFrequently: true }).drawImage(img, 0, 0);
+    }
+
+    async function setImage(kind, file) {
+      if (!file) return;
+      const img = await loadImage(file);
+      applyImage(kind, img);
+      state.fileNames[kind] = file.name;
+
+      if (kind === "a") {
+        fitToStage();
+      }
+
+      if (state.a && state.b && kind === "b") {
+        state.transform.x = (state.a.naturalWidth - state.b.naturalWidth) / 2;
+        state.transform.y = (state.a.naturalHeight - state.b.naturalHeight) / 2;
+        syncControls();
+      }
+
+      updateStatus();
+      draw();
+      renderPoints();
+      resetHistory();
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      })[char]);
+    }
+
+    function updateStatus() {
+      const a = state.a ? state.fileNames.a || "A画像" : "未選択";
+      const b = state.b ? state.fileNames.b || "B画像" : "未選択";
+      els.status.innerHTML = `<div class="status-line" title="${escapeHtml(a)}">A: ${escapeHtml(a)}</div><div class="status-line" title="${escapeHtml(b)}">B: ${escapeHtml(b)}</div>`;
+    }
+
+    function syncControls() {
+      ensureTransformNumbers();
+      ensureScaleAxes();
+      els.offsetX.value = round(state.transform.x, 3);
+      els.offsetY.value = round(state.transform.y, 3);
+      els.scale.value = round(state.transform.scaleX, 5);
+      els.scaleY.value = round(state.transform.scaleY, 5);
+      els.rotation.value = round(state.transform.rotation, 4);
+      els.opacity.value = state.transform.opacity;
+      updateAlignSummary();
+      updateAoriUi();
+    }
+
+    function updateAlignSummary() {
+      if (!els.alignSummary) return;
+      ensureTransformNumbers();
+      ensureScaleAxes();
+      els.alignSummary.textContent = `X ${round(state.transform.x, 2)} / Y ${round(state.transform.y, 2)} / 拡大 ${round(state.transform.scaleX, 4)}×${round(state.transform.scaleY, 4)} / 回転 ${round(state.transform.rotation, 2)}°`;
+    }
+
+    function setAlignPanelCollapsed(collapsed) {
+      els.alignControls.classList.toggle("collapsed", collapsed);
+      els.alignPanelToggle.textContent = collapsed ? "＋" : "−";
+      els.alignPanelToggle.title = collapsed ? "位置合わせメニューを表示" : "位置合わせメニューを折りたたむ";
+      localStorage.setItem("colorDiffAlignPanelCollapsedV2", collapsed ? "1" : "0");
+      updateAlignSummary();
+    }
+
+    function loadAlignPanelState() {
+      const saved = localStorage.getItem("colorDiffAlignPanelCollapsedV2");
+      setAlignPanelCollapsed(saved === null ? true : saved === "1");
+    }
+
+    function readControls() {
+      state.transform.x = Number(els.offsetX.value) || 0;
+      state.transform.y = Number(els.offsetY.value) || 0;
+      state.transform.scaleX = Math.max(0.0001, Number(els.scale.value) || 1);
+      state.transform.scaleY = Math.max(0.0001, Number(els.scaleY.value) || 1);
+      state.transform.scale = (state.transform.scaleX + state.transform.scaleY) / 2;
+      state.transform.rotation = Number(els.rotation.value) || 0;
+      state.transform.opacity = Number(els.opacity.value) || 0;
+      updateAlignSummary();
+      updateAoriUi();
+      refreshPointColors();
+    }
+
+    function readOpacityControl() {
+      state.transform.opacity = Number(els.opacity.value) || 0;
+      updateAoriUi();
+      draw();
+    }
+
+    function ensureScaleAxes() {
+      if (!Number.isFinite(state.transform.scaleX)) state.transform.scaleX = Number.isFinite(state.transform.scale) ? state.transform.scale : 1;
+      if (!Number.isFinite(state.transform.scaleY)) state.transform.scaleY = Number.isFinite(state.transform.scale) ? state.transform.scale : 1;
+      state.transform.scaleX = Math.max(0.0001, state.transform.scaleX);
+      state.transform.scaleY = Math.max(0.0001, state.transform.scaleY);
+      state.transform.scale = (state.transform.scaleX + state.transform.scaleY) / 2;
+    }
+
+    function ensureTransformNumbers() {
+      if (!Number.isFinite(state.transform.x)) state.transform.x = 0;
+      if (!Number.isFinite(state.transform.y)) state.transform.y = 0;
+      if (!Number.isFinite(state.transform.rotation)) state.transform.rotation = 0;
+      if (!Number.isFinite(state.transform.opacity)) state.transform.opacity = 0.55;
+    }
+
+    function draw() {
+      ensureTransformNumbers();
+      ensureScaleAxes();
+      const previousWorkspace = state.workspace;
+      const previousScale = state.viewScale || 1;
+      const bounds = computeWorkspaceBounds();
+      const originChanged = previousWorkspace && (previousWorkspace.x !== bounds.x || previousWorkspace.y !== bounds.y);
+      state.workspace = bounds;
+      if (els.canvas.width !== bounds.width || els.canvas.height !== bounds.height) {
+        els.canvas.width = bounds.width;
+        els.canvas.height = bounds.height;
+      }
+      ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
+
+      const aoriActive = state.aori.mode !== "overlay";
+      const showA = !aoriActive || state.aori.frame === "a";
+      const showB = !aoriActive || state.aori.frame === "b";
+
+      if (state.a && showA) {
+        drawAImage(bounds);
+      }
+
+      if (state.b && showB) {
+        drawBImage(bounds, aoriActive ? 1 : state.transform.opacity);
+      }
+
+      if (state.diff.enabled && state.a && state.b) {
+        drawDiffOverlay(bounds);
+      }
+
+      drawPoints();
+      els.canvas.style.width = `${els.canvas.width * state.viewScale}px`;
+      els.canvas.style.height = `${els.canvas.height * state.viewScale}px`;
+      els.zoomPercent.textContent = `${Math.round(state.viewScale * 100)}%`;
+
+      if (originChanged) {
+        els.stage.scrollLeft += (previousWorkspace.x - bounds.x) * previousScale;
+        els.stage.scrollTop += (previousWorkspace.y - bounds.y) * previousScale;
+      }
+    }
+
+    function drawAImage(bounds) {
+      ctx.save();
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(-bounds.x, -bounds.y, state.aCanvas.width, state.aCanvas.height);
+      ctx.drawImage(state.aCanvas, -bounds.x, -bounds.y);
+      ctx.restore();
+    }
+
+    function drawBImage(bounds, opacity) {
+      ensureScaleAxes();
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      const t = state.transform;
+      ctx.translate(t.x - bounds.x, t.y - bounds.y);
+      ctx.rotate(degToRad(t.rotation));
+      ctx.scale(t.scaleX, t.scaleY);
+      ctx.drawImage(state.bCanvas, 0, 0);
+      ctx.restore();
+    }
+
+    function drawDiffOverlay(bounds) {
+      const overlay = makeDiffOverlay(bounds);
+      if (overlay) ctx.drawImage(overlay, 0, 0);
+    }
+
+    function makeDiffOverlay(bounds) {
+      if (!state.a || !state.b) return null;
+      const width = bounds.width;
+      const height = bounds.height;
+      const maxPixels = 1800000;
+      const step = Math.max(1, Math.ceil(Math.sqrt((width * height) / maxPixels)));
+      const out = document.createElement("canvas");
+      out.width = Math.ceil(width / step);
+      out.height = Math.ceil(height / step);
+      const outCtx = out.getContext("2d");
+      const image = outCtx.createImageData(out.width, out.height);
+      const aCtx = state.aCanvas.getContext("2d", { willReadFrequently: true });
+      const bCtx = state.bCanvas.getContext("2d", { willReadFrequently: true });
+      const aData = aCtx.getImageData(0, 0, state.aCanvas.width, state.aCanvas.height).data;
+      const bData = bCtx.getImageData(0, 0, state.bCanvas.width, state.bCanvas.height).data;
+      const threshold = Math.max(0, Math.min(255, Number(state.diff.threshold) || 0));
+      for (let oy = 0; oy < out.height; oy++) {
+        const wy = bounds.y + oy * step;
+        for (let ox = 0; ox < out.width; ox++) {
+          const wx = bounds.x + ox * step;
+          const a = compositePixel(aData, state.aCanvas.width, state.aCanvas.height, wx, wy);
+          const bp = inverseBPoint(wx, wy);
+          const b = compositePixel(bData, state.bCanvas.width, state.bCanvas.height, bp.x, bp.y);
+          if (!a || !b) continue;
+          const diff = Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b));
+          if (diff < threshold) continue;
+          const i = (oy * out.width + ox) * 4;
+          image.data[i] = 255;
+          image.data[i + 1] = 0;
+          image.data[i + 2] = 0;
+          image.data[i + 3] = Math.max(90, Math.min(210, diff));
+        }
+      }
+      outCtx.putImageData(image, 0, 0);
+      if (step === 1) return out;
+      const scaled = document.createElement("canvas");
+      scaled.width = width;
+      scaled.height = height;
+      const scaledCtx = scaled.getContext("2d");
+      scaledCtx.imageSmoothingEnabled = false;
+      scaledCtx.drawImage(out, 0, 0, width, height);
+      return scaled;
+    }
+
+    function compositePixel(data, width, height, x, y) {
+      const ix = Math.round(x);
+      const iy = Math.round(y);
+      if (ix < 0 || iy < 0 || ix >= width || iy >= height) return null;
+      const i = (iy * width + ix) * 4;
+      const alpha = data[i + 3] / 255;
+      return {
+        r: Math.round(data[i] * alpha + 255 * (1 - alpha)),
+        g: Math.round(data[i + 1] * alpha + 255 * (1 - alpha)),
+        b: Math.round(data[i + 2] * alpha + 255 * (1 - alpha))
+      };
+    }
+
+    function computeWorkspaceBounds() {
+      const margin = 120;
+      let minX = 0;
+      let minY = 0;
+      let maxX = state.a ? state.aCanvas.width : 1200;
+      let maxY = state.a ? state.aCanvas.height : 800;
+
+      if (state.b) {
+        ensureScaleAxes();
+        const rect = transformedBRect();
+        minX = Math.min(minX, rect.minX);
+        minY = Math.min(minY, rect.minY);
+        maxX = Math.max(maxX, rect.maxX);
+        maxY = Math.max(maxY, rect.maxY);
+      }
+
+      for (const p of state.points) {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      }
+
+      minX = Math.floor(minX - margin);
+      minY = Math.floor(minY - margin);
+      maxX = Math.ceil(maxX + margin);
+      maxY = Math.ceil(maxY + margin);
+
+      return {
+        x: minX,
+        y: minY,
+        width: Math.max(320, maxX - minX),
+        height: Math.max(240, maxY - minY)
+      };
+    }
+
+    function transformedBRect() {
+      const t = state.transform;
+      const r = degToRad(t.rotation);
+      const cos = Math.cos(r);
+      const sin = Math.sin(r);
+      const corners = [
+        [0, 0],
+        [state.bCanvas.width * t.scaleX, 0],
+        [0, state.bCanvas.height * t.scaleY],
+        [state.bCanvas.width * t.scaleX, state.bCanvas.height * t.scaleY]
+      ].map(([x, y]) => ({
+        x: t.x + x * cos - y * sin,
+        y: t.y + x * sin + y * cos
+      }));
+
+      return {
+        minX: Math.min(...corners.map(p => p.x)),
+        minY: Math.min(...corners.map(p => p.y)),
+        maxX: Math.max(...corners.map(p => p.x)),
+        maxY: Math.max(...corners.map(p => p.y))
+      };
+    }
+
+    function drawPoints() {
+      ctx.save();
+      ctx.lineWidth = Math.max(1.5, 2 / state.viewScale);
+      ctx.font = `700 ${Math.max(12, 14 / state.viewScale)}px sans-serif`;
+      ctx.textBaseline = "alphabetic";
+      const sampleSize = getSampleSize();
+      const sampleRadius = Math.floor(sampleSize / 2);
+      const showSampleBox = sampleSize > 1 && state.markers.sampleBoxes;
+      state.points.forEach((p, index) => {
+        const sx = p.x - state.workspace.x;
+        const sy = p.y - state.workspace.y;
+        if (showSampleBox) {
+          const left = Math.round(sx) - sampleRadius - 0.5;
+          const top = Math.round(sy) - sampleRadius - 0.5;
+          ctx.save();
+          ctx.setLineDash([]);
+          ctx.lineWidth = 1 / state.viewScale;
+          if (p.selected) {
+            ctx.fillStyle = "rgba(230, 0, 45, 0.25)";
+            ctx.fillRect(left, top, sampleSize, sampleSize);
+            ctx.strokeStyle = "#fff";
+            ctx.strokeRect(left - 1 / state.viewScale, top - 1 / state.viewScale, sampleSize + 2 / state.viewScale, sampleSize + 2 / state.viewScale);
+            ctx.strokeStyle = "#e6002d";
+            ctx.strokeRect(left, top, sampleSize, sampleSize);
+          } else {
+            ctx.strokeStyle = "#fff";
+            ctx.strokeRect(left - 1 / state.viewScale, top - 1 / state.viewScale, sampleSize + 2 / state.viewScale, sampleSize + 2 / state.viewScale);
+            ctx.strokeStyle = "#000";
+            ctx.strokeRect(left, top, sampleSize, sampleSize);
+          }
+          ctx.restore();
+        }
+        if (state.markers.labels) {
+          ctx.lineWidth = Math.max(3, 4 / state.viewScale);
+          ctx.strokeStyle = "#fff";
+          ctx.fillStyle = "#e6002d";
+          const label = String(index + 1);
+          const tx = sx + 8 / state.viewScale;
+          const ty = sy - 8 / state.viewScale;
+          ctx.strokeText(label, tx, ty);
+          ctx.fillText(label, tx, ty);
+        }
+      });
+      ctx.restore();
+    }
+
+    function fitToStage() {
+      if (!state.a) return;
+      const pad = 48;
+      const bounds = computeWorkspaceBounds();
+      const scaleX = Math.max(0.05, (els.stage.clientWidth - pad) / bounds.width);
+      const scaleY = Math.max(0.05, (els.stage.clientHeight - pad) / bounds.height);
+      state.viewScale = Math.min(1, scaleX, scaleY);
+      draw();
+      requestAnimationFrame(() => {
+        els.stage.scrollLeft = Math.max(0, (els.canvas.clientWidth - els.stage.clientWidth) / 2);
+        els.stage.scrollTop = Math.max(0, (els.canvas.clientHeight - els.stage.clientHeight) / 2);
+      });
+    }
+
+    function oneToOne() {
+      state.viewScale = 1;
+      draw();
+    }
+
+    function zoomView(factor, event) {
+      const oldScale = state.viewScale;
+      const newScale = Math.max(0.05, Math.min(8, oldScale * factor));
+      if (Math.abs(newScale - oldScale) < 0.0001) return;
+
+      const stageRect = els.stage.getBoundingClientRect();
+      const canvasRect = els.canvas.getBoundingClientRect();
+      const focusClientX = event?.clientX ?? (stageRect.left + stageRect.width / 2);
+      const focusClientY = event?.clientY ?? (stageRect.top + stageRect.height / 2);
+      const canvasX = (focusClientX - canvasRect.left) / oldScale;
+      const canvasY = (focusClientY - canvasRect.top) / oldScale;
+
+      state.viewScale = newScale;
+      draw();
+
+      requestAnimationFrame(() => {
+        els.stage.scrollLeft = els.canvas.offsetLeft + canvasX * newScale - (focusClientX - stageRect.left);
+        els.stage.scrollTop = els.canvas.offsetTop + canvasY * newScale - (focusClientY - stageRect.top);
+      });
+    }
+
+    function setInteractionMode(mode) {
+      state.interactionMode = mode;
+      els.stage.classList.toggle("mode-image", mode === "image");
+      els.stage.classList.toggle("mode-pan", mode === "pan");
+      els.stage.classList.toggle("mode-point", mode === "point");
+      els.imageModeBtn.classList.toggle("active", mode === "image");
+      els.panModeBtn.classList.toggle("active", mode === "pan");
+      els.pointModeBtn.classList.toggle("active", mode === "point");
+    }
+
+    function updateAoriUi() {
+      const mode = state.aori.mode;
+      els.overlayModeBtn.classList.toggle("active", mode === "overlay");
+      els.manualAoriBtn.classList.toggle("active", mode === "manual");
+      els.autoAoriBtn.classList.toggle("active", mode === "auto");
+      els.autoAoriBtn.textContent = mode === "auto" ? "アオリ停止" : "自動アオリ";
+      els.opacityControl.hidden = mode !== "overlay";
+      els.aoriIntervalControl.hidden = mode !== "auto";
+      els.opacityLabel.textContent = `透明度 ${Math.round(state.transform.opacity * 100)}%`;
+      els.opacity.value = state.transform.opacity;
+      els.aoriIntervalLabel.textContent = `${state.aori.interval.toFixed(1)}秒`;
+      els.aoriInterval.value = state.aori.interval;
+      els.aoriBadge.textContent = mode === "overlay" ? "重ね" : `${state.aori.frame.toUpperCase()}表示`;
+    }
+
+    function updateMarkerUi() {
+      els.pointLabelsToggleBtn.classList.toggle("active", state.markers.labels);
+      els.sampleBoxesToggleBtn.classList.toggle("active", state.markers.sampleBoxes);
+      els.pointLabelsToggleBtn.setAttribute("aria-pressed", String(state.markers.labels));
+      els.sampleBoxesToggleBtn.setAttribute("aria-pressed", String(state.markers.sampleBoxes));
+    }
+
+    function togglePointLabels() {
+      rememberBeforeChange();
+      state.markers.labels = !state.markers.labels;
+      updateMarkerUi();
+      draw();
+    }
+
+    function toggleSampleBoxes() {
+      rememberBeforeChange();
+      state.markers.sampleBoxes = !state.markers.sampleBoxes;
+      updateMarkerUi();
+      draw();
+    }
+
+    function requireAoriImages() {
+      if (state.a && state.b) return true;
+      alert("A画像とB画像を読み込んでからアオリ表示してください。");
+      return false;
+    }
+
+    function stopAutoAori() {
+      if (state.aori.timer) {
+        clearInterval(state.aori.timer);
+        state.aori.timer = null;
+      }
+    }
+
+    function setOverlayMode() {
+      stopAutoAori();
+      state.aori.mode = "overlay";
+      updateAoriUi();
+      draw();
+    }
+
+    function toggleManualAori() {
+      if (!requireAoriImages()) return;
+      stopAutoAori();
+      state.aori.mode = "manual";
+      state.aori.frame = state.aori.frame === "a" ? "b" : "a";
+      updateAoriUi();
+      draw();
+    }
+
+    function toggleAutoAori() {
+      if (state.aori.mode === "auto") {
+        stopAutoAori();
+        state.aori.mode = "manual";
+        updateAoriUi();
+        return;
+      }
+      if (!requireAoriImages()) return;
+      stopAutoAori();
+      state.aori.mode = "auto";
+      updateAoriUi();
+      draw();
+      state.aori.timer = setInterval(() => {
+        state.aori.frame = state.aori.frame === "a" ? "b" : "a";
+        updateAoriUi();
+        draw();
+      }, Math.max(0.1, state.aori.interval) * 1000);
+    }
+
+    function setAoriInterval(value) {
+      state.aori.interval = Math.max(0.2, Math.min(2, Number(value) || 0.5));
+      updateAoriUi();
+      if (state.aori.mode === "auto") {
+        const frame = state.aori.frame;
+        stopAutoAori();
+        state.aori.frame = frame;
+        state.aori.mode = "manual";
+        toggleAutoAori();
+      }
+    }
+
+    function toggleViewSettings() {
+      els.viewSettingsPanel.hidden = !els.viewSettingsPanel.hidden;
+      els.viewSettingsBtn.textContent = els.viewSettingsPanel.hidden ? "表示設定▼" : "表示設定▲";
+    }
+
+    function setResultView(view) {
+      state.resultView = view === "detail" ? "detail" : "simple";
+      els.simpleResultsBtn.classList.toggle("active", state.resultView === "simple");
+      els.detailResultsBtn.classList.toggle("active", state.resultView === "detail");
+      renderPoints();
+    }
+
+    function toggleNotesPanel() {
+      els.notesPanel.hidden = !els.notesPanel.hidden;
+    }
+
+    function updateDiffUi() {
+      els.diffToggleBtn.classList.toggle("primary", state.diff.enabled);
+      els.diffToggleBtn.textContent = state.diff.enabled ? "差分表示中" : "差分表示";
+      els.diffThreshold.value = state.diff.threshold;
+    }
+
+    function toggleDiffView() {
+      if (!state.a || !state.b) {
+        alert("差分表示を使うには、A画像とB画像を両方読み込んでください。");
+        return;
+      }
+      rememberBeforeChange();
+      state.diff.enabled = !state.diff.enabled;
+      updateDiffUi();
+      draw();
+    }
+
+    function readDiffThreshold() {
+      state.diff.threshold = Math.max(0, Math.min(255, Number(els.diffThreshold.value) || 0));
+      updateDiffUi();
+      if (state.diff.enabled) draw();
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function loadPanelWidths() {
+      const savedLeft = localStorage.getItem("colorDiffLeftPanelWidth");
+      const savedRight = localStorage.getItem("colorDiffRightPanelWidth");
+      const left = savedLeft === null ? NaN : Number(savedLeft);
+      const right = savedRight === null ? NaN : Number(savedRight);
+      const viewport = document.documentElement.clientWidth;
+      const compact = viewport < 760;
+      const minLeft = compact ? 180 : 220;
+      const minRight = compact ? 220 : 240;
+      const minCenter = compact ? 220 : 260;
+      if (Number.isFinite(left)) {
+        const maxLeft = Math.max(minLeft, viewport - minRight - minCenter - 12);
+        document.documentElement.style.setProperty("--left-panel-width", `${clamp(left, minLeft, maxLeft)}px`);
+      }
+      if (Number.isFinite(right)) {
+        const currentLeft = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--left-panel-width")) || (compact ? 220 : 320);
+        const maxRight = Math.max(minRight, viewport - currentLeft - minCenter - 12);
+        document.documentElement.style.setProperty("--right-panel-width", `${clamp(right, minRight, maxRight)}px`);
+      }
+    }
+
+    function setupPanelResizer(handle, side) {
+      handle.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        const appRect = document.querySelector(".app").getBoundingClientRect();
+        const startX = event.clientX;
+        const currentLeft = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--left-panel-width")) || 320;
+        const currentRight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--right-panel-width")) || 360;
+        const compact = document.documentElement.clientWidth < 760;
+        const minCenter = compact ? 220 : 260;
+        const minLeft = compact ? 180 : 220;
+        const minRight = compact ? 220 : 240;
+        handle.setPointerCapture(event.pointerId);
+        handle.classList.add("active");
+        document.body.classList.add("resizing");
+
+        const move = moveEvent => {
+          const dx = moveEvent.clientX - startX;
+          if (side === "left") {
+            const maxLeft = appRect.width - currentRight - minCenter - 12;
+            const next = clamp(currentLeft + dx, minLeft, Math.max(minLeft, maxLeft));
+            document.documentElement.style.setProperty("--left-panel-width", `${next}px`);
+          } else {
+            const maxRight = appRect.width - currentLeft - minCenter - 12;
+            const next = clamp(currentRight - dx, minRight, Math.max(minRight, maxRight));
+            document.documentElement.style.setProperty("--right-panel-width", `${next}px`);
+          }
+        };
+
+        const up = () => {
+          handle.classList.remove("active");
+          document.body.classList.remove("resizing");
+          localStorage.setItem("colorDiffLeftPanelWidth", parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--left-panel-width")) || 320);
+          localStorage.setItem("colorDiffRightPanelWidth", parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--right-panel-width")) || 360);
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          draw();
+        };
+
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      });
+    }
+
+    function canvasPoint(evt) {
+      const rect = els.canvas.getBoundingClientRect();
+      return {
+        x: state.workspace.x + (evt.clientX - rect.left) * (els.canvas.width / rect.width),
+        y: state.workspace.y + (evt.clientY - rect.top) * (els.canvas.height / rect.height)
+      };
+    }
+
+    function inverseBPoint(x, y) {
+      ensureScaleAxes();
+      const t = state.transform;
+      const dx = x - t.x;
+      const dy = y - t.y;
+      const r = degToRad(-t.rotation);
+      const cos = Math.cos(r);
+      const sin = Math.sin(r);
+      return {
+        x: (dx * cos - dy * sin) / t.scaleX,
+        y: (dx * sin + dy * cos) / t.scaleY
+      };
+    }
+
+    function getSampleSize() {
+      const size = Math.round(Number(state.sampleSize) || 1);
+      return Math.max(1, Math.min(200, size));
+    }
+
+    function updateSampleSizeLabel() {
+      const size = getSampleSize();
+      els.sampleSizeLabel.textContent = `${size}×${size} px`;
+      els.sampleSize.value = size;
+    }
+
+    function sample(canvas, x, y) {
+      const ix = Math.round(x);
+      const iy = Math.round(y);
+      if (ix < 0 || iy < 0 || ix >= canvas.width || iy >= canvas.height) return null;
+      const size = getSampleSize();
+      const radius = Math.floor(size / 2);
+      const left = Math.max(0, ix - radius);
+      const top = Math.max(0, iy - radius);
+      const right = Math.min(canvas.width - 1, left + size - 1);
+      const bottom = Math.min(canvas.height - 1, top + size - 1);
+      const width = right - left + 1;
+      const height = bottom - top + 1;
+      const data = canvas.getContext("2d", { willReadFrequently: true }).getImageData(left, top, width, height).data;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 0;
+      const count = width * height;
+      for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3] / 255;
+        r += data[i] * alpha + 255 * (1 - alpha);
+        g += data[i + 1] * alpha + 255 * (1 - alpha);
+        b += data[i + 2] * alpha + 255 * (1 - alpha);
+        a += data[i + 3];
+      }
+      return {
+        r: Math.round(r / count),
+        g: Math.round(g / count),
+        b: Math.round(b / count),
+        a: Math.round(a / count),
+        x: ix,
+        y: iy,
+        sampleSize: size
+      };
+    }
+
+    function addPoint(x, y) {
+      if (!state.a || !state.b) {
+        alert("A画像とB画像を両方読み込んでから測定点を追加してください。");
+        return;
+      }
+      rememberBeforeChange();
+      state.points.push(recalculatePoint({ x, y, selected: false }));
+      draw();
+      renderPoints();
+    }
+
+    function recalculatePoint(point) {
+      const bPt = inverseBPoint(point.x, point.y);
+      const colorA = sample(state.aCanvas, point.x, point.y);
+      const colorB = sample(state.bCanvas, bPt.x, bPt.y);
+      const delta = colorA && colorB ? ciede2000(rgbToLab(colorA), rgbToLab(colorB)) : null;
+      return {
+        ...point,
+        bX: bPt.x,
+        bY: bPt.y,
+        colorA,
+        colorB,
+        delta
+      };
+    }
+
+    function refreshPointColors() {
+      if (!state.a || !state.b) return;
+      state.points = state.points.map(point => recalculatePoint(point));
+      draw();
+      renderPoints();
+      showTemporaryStatus("測定点を更新しました。");
+    }
+
+    function showTemporaryStatus(message) {
+      els.alignStatus.textContent = message;
+      clearTimeout(state.statusTimer);
+      state.statusTimer = setTimeout(() => {
+        if (els.alignStatus.textContent === message) els.alignStatus.textContent = "";
+      }, 1800);
+    }
+
+    function deleteSelectedPoints() {
+      const before = state.points.length;
+      if (state.points.some(point => point.selected)) rememberBeforeChange();
+      state.points = state.points.filter(point => !point.selected);
+      if (state.points.length !== before) {
+        draw();
+        renderPoints();
+      }
+    }
+
+    function setAllPointSelection(selected) {
+      state.points.forEach(point => {
+        point.selected = selected;
+      });
+      draw();
+      renderPoints();
+    }
+
+    function renderPoints() {
+      els.body.innerHTML = "";
+      renderPointsHead();
+      if (!state.points.length) {
+        els.summary.className = "empty";
+        els.summary.textContent = "まだ測定点がありません。";
+        return;
+      }
+
+      const valid = state.points.filter(p => Number.isFinite(p.delta));
+      if (valid.length) {
+        const avg = valid.reduce((sum, p) => sum + p.delta, 0) / valid.length;
+        const max = Math.max(...valid.map(p => p.delta));
+        els.summary.className = "metric";
+        els.summary.innerHTML = `<span>有効 ${valid.length} / 平均</span><b>${round(avg, 3)}</b><span>最大</span><b>${round(max, 3)}</b>`;
+      } else {
+        els.summary.className = "empty";
+        els.summary.textContent = "有効な測定点がありません。B画像の範囲外です。B画像の位置合わせを確認してください。";
+      }
+
+      state.points.forEach((p, index) => {
+        const tr = document.createElement("tr");
+        const common = `
+          <td class="col-select"><input class="point-check" type="checkbox" data-point-index="${index}" ${p.selected ? "checked" : ""} aria-label="${index + 1}番の点を選択"></td>
+          <td class="col-no">${index + 1}</td>
+        `;
+        if (state.resultView === "detail") {
+          tr.innerHTML = `${common}
+            <td><span class="coord-text">${coordText(p.x, p.y)}</span></td>
+            <td><span class="coord-text">${Number.isFinite(p.bX) && Number.isFinite(p.bY) ? coordText(p.bX, p.bY) : "-"}</span></td>
+            <td class="col-swatch">${swatch(p.colorA)}</td>
+            <td><span class="rgb-text">${rgbTextShort(p.colorA)}</span></td>
+            <td class="col-swatch">${swatch(p.colorB)}</td>
+            <td><span class="rgb-text">${rgbTextShort(p.colorB)}</span></td>
+            <td class="col-delta"><span class="delta-strong">${deltaText(p.delta)}</span></td>
+          `;
+        } else {
+          tr.innerHTML = `${common}
+            <td class="col-swatch">${swatch(p.colorA)}</td>
+            <td class="col-swatch">${swatch(p.colorB)}</td>
+            <td class="col-delta"><span class="delta-strong">${deltaText(p.delta)}</span></td>
+            <td>${deltaJudge(p.delta)}</td>
+          `;
+        }
+        els.body.appendChild(tr);
+      });
+    }
+
+    function renderPointsHead() {
+      if (state.resultView === "detail") {
+        els.head.innerHTML = `<tr>
+          <th class="col-select">選択</th>
+          <th class="col-no">#</th>
+          <th>A座標</th>
+          <th>B座標</th>
+          <th class="col-swatch">A色</th>
+          <th>A RGB</th>
+          <th class="col-swatch">B色</th>
+          <th>B RGB</th>
+          <th class="col-delta">ΔE00</th>
+        </tr>`;
+      } else {
+        els.head.innerHTML = `<tr>
+          <th class="col-select">選択</th>
+          <th class="col-no">#</th>
+          <th class="col-swatch">A色</th>
+          <th class="col-swatch">B色</th>
+          <th class="col-delta">ΔE00</th>
+          <th>判定</th>
+        </tr>`;
+      }
+    }
+
+    function swatch(c) {
+      if (!c) return "-";
+      return `<span class="swatch" title="${rgbText(c)}" style="background:${rgbCss(c)}"></span>`;
+    }
+
+    function rgbCss(c) {
+      return `rgb(${c.r}, ${c.g}, ${c.b})`;
+    }
+
+    function rgbText(c) {
+      return `RGB(${c.r}, ${c.g}, ${c.b})`;
+    }
+
+    function rgbTextShort(c) {
+      return c ? `${c.r},${c.g},${c.b}` : "-";
+    }
+
+    function coordText(x, y) {
+      return `${round(x, 1)}, ${round(y, 1)}`;
+    }
+
+    function deltaText(delta) {
+      return Number.isFinite(delta) ? round(delta, 3) : "範囲外";
+    }
+
+    function deltaJudge(delta) {
+      if (!Number.isFinite(delta)) return "範囲外";
+      if (delta < 1) return "ほぼ同等";
+      if (delta < 2) return "わずか";
+      if (delta < 5) return "目視差あり";
+      return "大きい差";
+    }
+
+    function exportCsv() {
+      const header = ["No", "A_x", "A_y", "B_x", "B_y", "Sample_px", "A_R", "A_G", "A_B", "B_R", "B_G", "B_B", "DeltaE00"];
+      const rows = state.points.map((p, i) => [
+        i + 1,
+        round(p.x, 3),
+        round(p.y, 3),
+        round(p.bX, 3),
+        round(p.bY, 3),
+        p.colorA?.sampleSize || p.colorB?.sampleSize || getSampleSize(),
+        p.colorA?.r ?? "",
+        p.colorA?.g ?? "",
+        p.colorA?.b ?? "",
+        p.colorB?.r ?? "",
+        p.colorB?.g ?? "",
+        p.colorB?.b ?? "",
+        Number.isFinite(p.delta) ? round(p.delta, 5) : ""
+      ]);
+      const csv = [header, ...rows].map(row => row.map(csvCell).join(",")).join("\n");
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `color-diff-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function exportScreenshot() {
+      draw();
+      const stageRect = els.stage.getBoundingClientRect();
+      const canvasRect = els.canvas.getBoundingClientRect();
+      const left = Math.max(stageRect.left, canvasRect.left);
+      const top = Math.max(stageRect.top, canvasRect.top);
+      const right = Math.min(stageRect.right, canvasRect.right);
+      const bottom = Math.min(stageRect.bottom, canvasRect.bottom);
+      const outWidth = Math.max(1, Math.round(right - left));
+      const outHeight = Math.max(1, Math.round(bottom - top));
+      const scale = state.viewScale || 1;
+      const sx = Math.max(0, (left - canvasRect.left) / scale);
+      const sy = Math.max(0, (top - canvasRect.top) / scale);
+      const sw = Math.min(els.canvas.width - sx, outWidth / scale);
+      const sh = Math.min(els.canvas.height - sy, outHeight / scale);
+
+      const out = document.createElement("canvas");
+      out.width = outWidth;
+      out.height = outHeight;
+      const outCtx = out.getContext("2d");
+      drawChecker(outCtx, outWidth, outHeight, 12);
+      outCtx.drawImage(els.canvas, sx, sy, sw, sh, 0, 0, outWidth, outHeight);
+      downloadBlob(dataUrlToBlob(out.toDataURL("image/png")), `color-diff-view-${timestamp()}.png`);
+    }
+
+    function exportFullPng() {
+      draw();
+      downloadBlob(dataUrlToBlob(els.canvas.toDataURL("image/png")), `color-diff-full-${timestamp()}.png`);
+    }
+
+    function exportDiffPng() {
+      if (!state.a || !state.b) {
+        alert("差分PNGを書き出すには、A画像とB画像を両方読み込んでください。");
+        return;
+      }
+      const previous = state.diff.enabled;
+      state.diff.enabled = true;
+      draw();
+      downloadBlob(dataUrlToBlob(els.canvas.toDataURL("image/png")), `color-diff-map-${timestamp()}.png`);
+      state.diff.enabled = previous;
+      updateDiffUi();
+      draw();
+    }
+
+    function drawChecker(context, width, height, size) {
+      context.fillStyle = "#eef3f8";
+      context.fillRect(0, 0, width, height);
+      context.fillStyle = "#dfe7ef";
+      for (let y = 0; y < height; y += size) {
+        for (let x = 0; x < width; x += size) {
+          if (((x / size) + (y / size)) % 2 === 0) context.fillRect(x, y, size, size);
+        }
+      }
+    }
+
+    function saveProject() {
+      if (!state.a || !state.b) {
+        alert("作業JSON保存にはA画像とB画像の両方が必要です。両方を読み込んでから保存してください。");
+        return;
+      }
+      if (!confirm("JSON内にA画像・B画像の画像データも含まれます。機密画像の共有に注意してください。保存しますか？")) return;
+      refreshPointColors();
+      const project = {
+        app: "color-diff-overlay",
+        version: 1,
+        savedAt: new Date().toISOString(),
+        images: {
+          a: state.aCanvas.toDataURL("image/png"),
+          b: state.bCanvas.toDataURL("image/png")
+        },
+        imageNames: { ...state.fileNames },
+        sampleSize: getSampleSize(),
+        transform: { ...state.transform },
+        diff: { ...state.diff },
+        points: state.points.map(point => ({
+          x: point.x,
+          y: point.y,
+          selected: false
+        })),
+        view: {
+          viewScale: state.viewScale,
+          interactionMode: state.interactionMode,
+          scrollLeft: els.stage.scrollLeft,
+          scrollTop: els.stage.scrollTop
+        }
+      };
+      const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json;charset=utf-8" });
+      downloadBlob(blob, `color-diff-project-${timestamp()}.json`);
+    }
+
+    async function loadProject(file) {
+      if (!file) return;
+      const project = JSON.parse(await file.text());
+      if (project.app !== "color-diff-overlay" || !project.images?.a || !project.images?.b) {
+        alert("このJSONは本ツールの作業ファイルではありません。作業JSON保存で作成したファイルを選んでください。");
+        return;
+      }
+
+      const [imgA, imgB] = await Promise.all([
+        loadImageSource(project.images.a),
+        loadImageSource(project.images.b)
+      ]);
+      applyImage("a", imgA);
+      applyImage("b", imgB);
+      state.fileNames = {
+        a: project.imageNames?.a || "保存済みA画像",
+        b: project.imageNames?.b || "保存済みB画像"
+      };
+      state.sampleSize = Number(project.sampleSize) || 1;
+      updateSampleSizeLabel();
+      state.diff = {
+        enabled: false,
+        threshold: 30,
+        ...(project.diff || {})
+      };
+      updateDiffUi();
+      state.transform = {
+        x: 0,
+        y: 0,
+        scale: 1,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        opacity: 1,
+        ...(project.transform || {})
+      };
+      ensureScaleAxes();
+      state.points = (project.points || []).map(point => recalculatePoint({ x: point.x, y: point.y, selected: false }));
+      state.viewScale = Number(project.view?.viewScale) || 1;
+      syncControls();
+      updateStatus();
+      draw();
+      renderPoints();
+      setInteractionMode(project.view?.interactionMode || "image");
+      resetHistory();
+      requestAnimationFrame(() => {
+        els.stage.scrollLeft = Number(project.view?.scrollLeft) || 0;
+        els.stage.scrollTop = Number(project.view?.scrollTop) || 0;
+      });
+    }
+
+    function downloadBlob(blob, filename) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function dataUrlToBlob(dataUrl) {
+      const [meta, body] = dataUrl.split(",");
+      const mime = meta.match(/data:(.*?);/)?.[1] || "application/octet-stream";
+      const binary = atob(body);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    }
+
+    function timestamp() {
+      return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    }
+
+    function csvCell(value) {
+      const text = String(value);
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    }
+
+    async function autoAlign() {
+      if (!state.a || !state.b) {
+        els.alignStatus.textContent = "A画像とB画像を両方読み込んでから自動位置合わせしてください。";
+        setAlignProgress(0, false);
+        return;
+      }
+
+      els.autoAlignBtn.disabled = true;
+      els.alignStatus.textContent = "自動位置合わせ中... X/Y移動、X/Y拡大率、回転を探索しています。";
+      setAlignProgress(0, true);
+
+      try {
+        ensureScaleAxes();
+        const beforeAlign = captureHistoryState();
+        const data = makeAlignData(360);
+        const base = { ...state.transform };
+        const rough = await searchAlignment(data, {
+          center: base,
+          scaleXOffsets: [-0.06, -0.03, 0, 0.03, 0.06],
+          scaleYOffsets: [-0.06, -0.03, 0, 0.03, 0.06],
+          rotationOffsets: [-2, -1, 0, 1, 2],
+          range: 100,
+          step: 10,
+          label: "粗探索",
+          progressStart: 0,
+          progressSpan: 0.55
+        });
+        const fine = await searchAlignment(data, {
+          center: rough,
+          scaleXOffsets: [-0.015, -0.0075, 0, 0.0075, 0.015],
+          scaleYOffsets: [-0.015, -0.0075, 0, 0.0075, 0.015],
+          rotationOffsets: [-0.5, 0, 0.5],
+          range: 12,
+          step: 2,
+          label: "細探索",
+          progressStart: 0.55,
+          progressSpan: 0.35
+        });
+        const extraFine = await searchAlignment(data, {
+          center: fine,
+          scaleXOffsets: [-0.004, 0, 0.004],
+          scaleYOffsets: [-0.004, 0, 0.004],
+          rotationOffsets: [-0.1, 0, 0.1],
+          range: 3,
+          step: 0.75,
+          label: "微調整",
+          progressStart: 0.9,
+          progressSpan: 0.1
+        });
+
+        state.transform.x = extraFine.x;
+        state.transform.y = extraFine.y;
+        state.transform.scaleX = extraFine.scaleX;
+        state.transform.scaleY = extraFine.scaleY;
+        state.transform.scale = (extraFine.scaleX + extraFine.scaleY) / 2;
+        state.transform.rotation = extraFine.rotation;
+        pushHistorySnapshot(beforeAlign);
+        syncControls();
+        refreshPointColors();
+        setAlignProgress(1, true);
+        els.alignStatus.textContent = `完了: X ${round(extraFine.x, 2)}, Y ${round(extraFine.y, 2)}, scaleX ${round(extraFine.scaleX, 5)}, scaleY ${round(extraFine.scaleY, 5)}, 回転 ${round(extraFine.rotation, 3)}°, score ${round(extraFine.score, 5)}`;
+      } catch (error) {
+        els.alignStatus.textContent = `自動位置合わせに失敗しました: ${error.message}`;
+        setAlignProgress(0, false);
+      } finally {
+        els.autoAlignBtn.disabled = false;
+      }
+    }
+
+    function setAlignProgress(value, visible) {
+      const percent = Math.max(0, Math.min(100, value * 100));
+      els.alignProgressTrack.hidden = !visible;
+      els.alignProgressFill.style.width = `${percent}%`;
+    }
+
+    function updateAlignProgress(label, checked, total, start, span) {
+      const local = total > 0 ? checked / total : 0;
+      const overall = start + local * span;
+      setAlignProgress(overall, true);
+      els.alignStatus.textContent = `${label}: ${Math.round(overall * 100)}% (${checked} / ${total}) - 回転候補も探索中`;
+    }
+
+    function makeAlignData(maxSize) {
+      return {
+        a: makeFeatureImage(state.aCanvas, maxSize),
+        b: makeFeatureImage(state.bCanvas, maxSize),
+        aFullWidth: state.aCanvas.width,
+        aFullHeight: state.aCanvas.height,
+        bFullWidth: state.bCanvas.width,
+        bFullHeight: state.bCanvas.height
+      };
+    }
+
+    function makeFeatureImage(source, maxSize) {
+      const scale = Math.min(1, maxSize / Math.max(source.width, source.height));
+      const width = Math.max(1, Math.round(source.width * scale));
+      const height = Math.max(1, Math.round(source.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      context.imageSmoothingEnabled = true;
+      context.drawImage(source, 0, 0, width, height);
+      const rgba = context.getImageData(0, 0, width, height).data;
+      const gray = new Float32Array(width * height);
+      const edge = new Float32Array(width * height);
+
+      for (let i = 0, p = 0; i < rgba.length; i += 4, p++) {
+        gray[p] = (0.2126 * rgba[i] + 0.7152 * rgba[i + 1] + 0.0722 * rgba[i + 2]) / 255;
+      }
+
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const i = y * width + x;
+          const gx = gray[i + 1] - gray[i - 1];
+          const gy = gray[i + width] - gray[i - width];
+          edge[i] = Math.min(1, Math.sqrt(gx * gx + gy * gy) * 3);
+        }
+      }
+
+      return { width, height, gray, edge, fullToSmallX: width / source.width, fullToSmallY: height / source.height };
+    }
+
+    async function searchAlignment(data, options) {
+      ensureScaleCandidate(options.center);
+      const scaleXBase = Math.max(0.0001, options.center.scaleX);
+      const scaleYBase = Math.max(0.0001, options.center.scaleY);
+      const rotationBase = Number.isFinite(options.center.rotation) ? options.center.rotation : 0;
+      const rotationOffsets = options.rotationOffsets || [0];
+      let best = { ...options.center, score: Infinity };
+      let checked = 0;
+      const offsetCount = options.scaleXOffsets.length * options.scaleYOffsets.length * rotationOffsets.length;
+      const total = offsetCount * Math.pow(Math.floor((options.range * 2) / options.step) + 1, 2);
+
+      for (const scaleXOffset of options.scaleXOffsets) {
+        const scaleX = Math.max(0.0001, scaleXBase * (1 + scaleXOffset));
+        for (const scaleYOffset of options.scaleYOffsets) {
+          const scaleY = Math.max(0.0001, scaleYBase * (1 + scaleYOffset));
+          for (const rotationOffset of rotationOffsets) {
+            const rotation = rotationBase + rotationOffset;
+            for (let y = -options.range; y <= options.range + 0.0001; y += options.step) {
+              for (let x = -options.range; x <= options.range + 0.0001; x += options.step) {
+                const candidate = {
+                  ...options.center,
+                  x: options.center.x + x,
+                  y: options.center.y + y,
+                  scaleX,
+                  scaleY,
+                  scale: (scaleX + scaleY) / 2,
+                  rotation
+                };
+                const score = scoreAlignment(data, candidate);
+                if (score < best.score) best = { ...candidate, score };
+                checked++;
+              }
+              if (checked % 300 === 0) {
+                updateAlignProgress(options.label, checked, total, options.progressStart || 0, options.progressSpan || 1);
+                await nextFrame();
+              }
+            }
+          }
+        }
+      }
+
+      updateAlignProgress(options.label, total, total, options.progressStart || 0, options.progressSpan || 1);
+      return best;
+    }
+
+    function ensureScaleCandidate(t) {
+      if (!Number.isFinite(t.scaleX)) t.scaleX = Number.isFinite(t.scale) ? t.scale : 1;
+      if (!Number.isFinite(t.scaleY)) t.scaleY = Number.isFinite(t.scale) ? t.scale : 1;
+      t.scaleX = Math.max(0.0001, t.scaleX);
+      t.scaleY = Math.max(0.0001, t.scaleY);
+      t.scale = (t.scaleX + t.scaleY) / 2;
+      if (!Number.isFinite(t.rotation)) t.rotation = 0;
+    }
+
+    function scoreAlignment(data, t) {
+      ensureScaleCandidate(t);
+      const a = data.a;
+      const b = data.b;
+      const step = Math.max(2, Math.floor(Math.max(a.width, a.height) / 180));
+      const rad = degToRad(-t.rotation);
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const aSmallToFullX = data.aFullWidth / a.width;
+      const aSmallToFullY = data.aFullHeight / a.height;
+      let sum = 0;
+      let count = 0;
+
+      for (let ay = step; ay < a.height - step; ay += step) {
+        const fullY = ay * aSmallToFullY;
+        for (let ax = step; ax < a.width - step; ax += step) {
+          const fullX = ax * aSmallToFullX;
+          const dx = fullX - t.x;
+          const dy = fullY - t.y;
+          const bxFull = (dx * cos - dy * sin) / t.scaleX;
+          const byFull = (dx * sin + dy * cos) / t.scaleY;
+          const bx = bxFull * b.fullToSmallX;
+          const by = byFull * b.fullToSmallY;
+          if (bx < 1 || by < 1 || bx >= b.width - 1 || by >= b.height - 1) continue;
+
+          const ai = ay * a.width + ax;
+          const bg = sampleFloat(b.gray, b.width, bx, by);
+          const be = sampleFloat(b.edge, b.width, bx, by);
+          const luminanceDiff = Math.abs(a.gray[ai] - bg);
+          const edgeDiff = Math.abs(a.edge[ai] - be);
+          const edgeWeight = 0.55 + Math.min(0.65, a.edge[ai] + be);
+          sum += (luminanceDiff * 0.62 + edgeDiff * 0.38) * edgeWeight;
+          count++;
+        }
+      }
+
+      if (count < 100) return Infinity;
+      return sum / count;
+    }
+
+    function sampleFloat(values, width, x, y) {
+      const x0 = Math.floor(x);
+      const y0 = Math.floor(y);
+      const x1 = x0 + 1;
+      const y1 = y0 + 1;
+      const wx = x - x0;
+      const wy = y - y0;
+      const i00 = y0 * width + x0;
+      const i10 = y0 * width + x1;
+      const i01 = y1 * width + x0;
+      const i11 = y1 * width + x1;
+      const top = values[i00] * (1 - wx) + values[i10] * wx;
+      const bottom = values[i01] * (1 - wx) + values[i11] * wx;
+      return top * (1 - wy) + bottom * wy;
+    }
+
+    function nextFrame() {
+      return new Promise(resolve => requestAnimationFrame(resolve));
+    }
+
+    function rgbToLab(rgb) {
+      const r = pivotRgb(rgb.r / 255);
+      const g = pivotRgb(rgb.g / 255);
+      const b = pivotRgb(rgb.b / 255);
+
+      let x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
+      let y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
+      let z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
+
+      x = pivotXyz(x / 0.95047);
+      y = pivotXyz(y / 1.00000);
+      z = pivotXyz(z / 1.08883);
+
+      return {
+        L: 116 * y - 16,
+        a: 500 * (x - y),
+        b: 200 * (y - z)
+      };
+    }
+
+    function pivotRgb(v) {
+      return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    }
+
+    function pivotXyz(v) {
+      return v > 0.008856 ? Math.cbrt(v) : (7.787037 * v) + (16 / 116);
+    }
+
+    function ciede2000(lab1, lab2) {
+      const kL = 1;
+      const kC = 1;
+      const kH = 1;
+      const L1 = lab1.L;
+      const a1 = lab1.a;
+      const b1 = lab1.b;
+      const L2 = lab2.L;
+      const a2 = lab2.a;
+      const b2 = lab2.b;
+      const avgLp = (L1 + L2) / 2;
+      const C1 = Math.sqrt(a1 * a1 + b1 * b1);
+      const C2 = Math.sqrt(a2 * a2 + b2 * b2);
+      const avgC = (C1 + C2) / 2;
+      const G = 0.5 * (1 - Math.sqrt(Math.pow(avgC, 7) / (Math.pow(avgC, 7) + Math.pow(25, 7))));
+      const a1p = (1 + G) * a1;
+      const a2p = (1 + G) * a2;
+      const C1p = Math.sqrt(a1p * a1p + b1 * b1);
+      const C2p = Math.sqrt(a2p * a2p + b2 * b2);
+      const avgCp = (C1p + C2p) / 2;
+      const h1p = hueDeg(b1, a1p);
+      const h2p = hueDeg(b2, a2p);
+      const dLp = L2 - L1;
+      const dCp = C2p - C1p;
+      let dhp = 0;
+      if (C1p * C2p !== 0) {
+        if (Math.abs(h2p - h1p) <= 180) dhp = h2p - h1p;
+        else if (h2p <= h1p) dhp = h2p - h1p + 360;
+        else dhp = h2p - h1p - 360;
+      }
+      const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(degToRad(dhp / 2));
+      let avgHp = h1p + h2p;
+      if (C1p * C2p === 0) avgHp = h1p + h2p;
+      else if (Math.abs(h1p - h2p) <= 180) avgHp = (h1p + h2p) / 2;
+      else if (h1p + h2p < 360) avgHp = (h1p + h2p + 360) / 2;
+      else avgHp = (h1p + h2p - 360) / 2;
+      const T = 1
+        - 0.17 * Math.cos(degToRad(avgHp - 30))
+        + 0.24 * Math.cos(degToRad(2 * avgHp))
+        + 0.32 * Math.cos(degToRad(3 * avgHp + 6))
+        - 0.20 * Math.cos(degToRad(4 * avgHp - 63));
+      const dRo = 30 * Math.exp(-Math.pow((avgHp - 275) / 25, 2));
+      const Rc = 2 * Math.sqrt(Math.pow(avgCp, 7) / (Math.pow(avgCp, 7) + Math.pow(25, 7)));
+      const Sl = 1 + (0.015 * Math.pow(avgLp - 50, 2)) / Math.sqrt(20 + Math.pow(avgLp - 50, 2));
+      const Sc = 1 + 0.045 * avgCp;
+      const Sh = 1 + 0.015 * avgCp * T;
+      const Rt = -Math.sin(degToRad(2 * dRo)) * Rc;
+
+      return Math.sqrt(
+        Math.pow(dLp / (kL * Sl), 2) +
+        Math.pow(dCp / (kC * Sc), 2) +
+        Math.pow(dHp / (kH * Sh), 2) +
+        Rt * (dCp / (kC * Sc)) * (dHp / (kH * Sh))
+      );
+    }
+
+    function hueDeg(y, x) {
+      const h = radToDeg(Math.atan2(y, x));
+      return h >= 0 ? h : h + 360;
+    }
+
+    function degToRad(deg) {
+      return deg * Math.PI / 180;
+    }
+
+    function radToDeg(rad) {
+      return rad * 180 / Math.PI;
+    }
+
+    function round(value, places) {
+      const p = Math.pow(10, places);
+      return Math.round(value * p) / p;
+    }
+
+    ["offsetX", "offsetY", "scale", "scaleY", "rotation"].forEach(id => {
+      els[id].addEventListener("focusin", beginHistoryEdit);
+      els[id].addEventListener("pointerdown", beginHistoryEdit);
+      els[id].addEventListener("input", readControls);
+      els[id].addEventListener("change", commitHistoryEdit);
+      els[id].addEventListener("blur", commitHistoryEdit);
+    });
+    els.opacity.addEventListener("focusin", beginHistoryEdit);
+    els.opacity.addEventListener("pointerdown", beginHistoryEdit);
+    els.opacity.addEventListener("input", readOpacityControl);
+    els.opacity.addEventListener("change", commitHistoryEdit);
+    els.opacity.addEventListener("blur", commitHistoryEdit);
+    els.sampleSize.addEventListener("focusin", beginHistoryEdit);
+    els.sampleSize.addEventListener("pointerdown", beginHistoryEdit);
+    els.sampleSize.addEventListener("input", () => {
+      state.sampleSize = Number(els.sampleSize.value) || 1;
+      updateSampleSizeLabel();
+      refreshPointColors();
+    });
+    els.sampleSize.addEventListener("change", commitHistoryEdit);
+    els.sampleSize.addEventListener("blur", commitHistoryEdit);
+    els.alignPanelToggle.addEventListener("click", () => {
+      setAlignPanelCollapsed(!els.alignControls.classList.contains("collapsed"));
+    });
+
+    loadPanelWidths();
+    updateSampleSizeLabel();
+    updateAoriUi();
+    updateMarkerUi();
+    updateDiffUi();
+    setResultView("simple");
+    loadAlignPanelState();
+    setupPanelResizer(els.leftResizer, "left");
+    setupPanelResizer(els.rightResizer, "right");
+
+    async function handleImageFileChange(kind, event) {
+      try {
+        await setImage(kind, event.target.files[0]);
+      } catch (error) {
+        alert(`画像を読み込めませんでした: ${error.message}`);
+      } finally {
+        event.target.value = "";
+      }
+    }
+
+    els.fileA.addEventListener("change", event => handleImageFileChange("a", event));
+    els.fileB.addEventListener("change", event => handleImageFileChange("b", event));
+    els.undoBtn.addEventListener("click", undo);
+    els.redoBtn.addEventListener("click", redo);
+    els.zoomOutBtn.addEventListener("click", () => {
+      rememberBeforeChange();
+      zoomView(0.85);
+    });
+    els.zoomInBtn.addEventListener("click", () => {
+      rememberBeforeChange();
+      zoomView(1.18);
+    });
+    els.viewResetBtn.addEventListener("click", () => {
+      rememberBeforeChange();
+      fitToStage();
+    });
+    els.viewSettingsBtn.addEventListener("click", toggleViewSettings);
+    els.imageModeBtn.addEventListener("click", () => setInteractionMode("image"));
+    els.panModeBtn.addEventListener("click", () => setInteractionMode("pan"));
+    els.pointModeBtn.addEventListener("click", () => setInteractionMode("point"));
+    els.overlayModeBtn.addEventListener("click", setOverlayMode);
+    els.manualAoriBtn.addEventListener("click", toggleManualAori);
+    els.autoAoriBtn.addEventListener("click", toggleAutoAori);
+    els.pointLabelsToggleBtn.addEventListener("click", togglePointLabels);
+    els.sampleBoxesToggleBtn.addEventListener("click", toggleSampleBoxes);
+    els.aoriInterval.addEventListener("input", event => setAoriInterval(event.target.value));
+    els.autoAlignBtn.addEventListener("click", autoAlign);
+    els.deleteSelectedBtn.addEventListener("click", deleteSelectedPoints);
+    els.selectAllPointsBtn.addEventListener("click", () => setAllPointSelection(true));
+    els.clearPointSelectionBtn.addEventListener("click", () => setAllPointSelection(false));
+    els.simpleResultsBtn.addEventListener("click", () => setResultView("simple"));
+    els.detailResultsBtn.addEventListener("click", () => setResultView("detail"));
+    els.notesToggleBtn.addEventListener("click", toggleNotesPanel);
+    els.body.addEventListener("change", event => {
+      if (!event.target.classList.contains("point-check")) return;
+      const index = Number(event.target.dataset.pointIndex);
+      if (!Number.isInteger(index) || !state.points[index]) return;
+      state.points[index].selected = event.target.checked;
+      draw();
+    });
+    document.getElementById("csvBtn").addEventListener("click", exportCsv);
+    els.screenshotBtn.addEventListener("click", exportScreenshot);
+    els.fullPngBtn.addEventListener("click", exportFullPng);
+    els.diffPngBtn.addEventListener("click", exportDiffPng);
+    els.saveProjectBtn.addEventListener("click", saveProject);
+    els.loadProjectBtn.addEventListener("click", () => els.projectFile.click());
+    els.diffToggleBtn.addEventListener("click", toggleDiffView);
+    els.diffThreshold.addEventListener("focusin", beginHistoryEdit);
+    els.diffThreshold.addEventListener("pointerdown", beginHistoryEdit);
+    els.diffThreshold.addEventListener("input", readDiffThreshold);
+    els.diffThreshold.addEventListener("change", commitHistoryEdit);
+    els.diffThreshold.addEventListener("blur", commitHistoryEdit);
+    els.projectFile.addEventListener("change", async event => {
+      try {
+        await loadProject(event.target.files[0]);
+      } catch (error) {
+        alert(`作業ファイルの読み込みに失敗しました: ${error.message}`);
+      } finally {
+        event.target.value = "";
+      }
+    });
+
+    const nudges = [
+      ["nudgeLeft", -1, 0],
+      ["nudgeRight", 1, 0],
+      ["nudgeUp", 0, -1],
+      ["nudgeDown", 0, 1]
+    ];
+    nudges.forEach(([id, dx, dy]) => {
+      document.getElementById(id).addEventListener("click", event => {
+        const step = event.shiftKey ? 10 : 1;
+        rememberBeforeChange();
+        state.transform.x += dx * step;
+        state.transform.y += dy * step;
+        syncControls();
+        refreshPointColors();
+      });
+    });
+
+    els.stage.addEventListener("wheel", event => {
+      if (state.interactionMode === "image") return;
+      event.preventDefault();
+      zoomView(event.deltaY < 0 ? 1.12 : 0.89, event);
+    }, { passive: false });
+
+    els.canvas.addEventListener("pointerdown", event => {
+      if (state.interactionMode === "pan" || state.interactionMode === "point") {
+        state.drag = {
+          mode: state.interactionMode,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startScrollLeft: els.stage.scrollLeft,
+          startScrollTop: els.stage.scrollTop,
+          moved: false,
+          point: canvasPoint(event)
+        };
+        els.canvas.setPointerCapture(event.pointerId);
+        els.canvas.classList.add("dragging");
+        return;
+      }
+
+      if (!state.b) return;
+      const p = canvasPoint(event);
+      state.drag = {
+        mode: "image",
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startX: state.transform.x,
+        startY: state.transform.y,
+        beforeSnapshot: captureHistoryState(),
+        moved: false,
+        point: p
+      };
+      els.canvas.setPointerCapture(event.pointerId);
+      els.canvas.classList.add("dragging");
+    });
+
+    els.canvas.addEventListener("pointermove", event => {
+      if (!state.drag) return;
+      if (state.drag.mode === "pan" || state.drag.mode === "point") {
+        const dx = event.clientX - state.drag.startClientX;
+        const dy = event.clientY - state.drag.startClientY;
+        if (Math.abs(dx) + Math.abs(dy) > 5) state.drag.moved = true;
+        els.stage.scrollLeft = state.drag.startScrollLeft - dx;
+        els.stage.scrollTop = state.drag.startScrollTop - dy;
+      } else {
+        const dx = (event.clientX - state.drag.startClientX) / state.viewScale;
+        const dy = (event.clientY - state.drag.startClientY) / state.viewScale;
+        if (Math.abs(dx) + Math.abs(dy) > 1) state.drag.moved = true;
+        state.transform.x = state.drag.startX + dx;
+        state.transform.y = state.drag.startY + dy;
+        syncControls();
+        draw();
+      }
+    });
+
+    els.canvas.addEventListener("pointerup", event => {
+      if (!state.drag) return;
+      const mode = state.drag.mode;
+      const wasClick = mode === "point" && !state.drag.moved && !event.shiftKey;
+      const p = mode === "point" ? state.drag.point : canvasPoint(event);
+      const restoreScroll = wasClick ? { left: state.drag.startScrollLeft, top: state.drag.startScrollTop } : null;
+      const beforeSnapshot = state.drag.beforeSnapshot;
+      const moved = state.drag.moved;
+      state.drag = null;
+      els.canvas.classList.remove("dragging");
+      if (restoreScroll) {
+        els.stage.scrollLeft = restoreScroll.left;
+        els.stage.scrollTop = restoreScroll.top;
+      }
+      if (wasClick) addPoint(p.x, p.y);
+      if (mode === "image" && moved) {
+        pushHistorySnapshot(beforeSnapshot);
+        refreshPointColors();
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      if (state.viewScale < 1) fitToStage();
+    });
+    window.addEventListener("beforeunload", stopAutoAori);
+
+    draw();
+    renderPoints();
+    setInteractionMode("image");
+  </script>
+</body>
+</html>
 
