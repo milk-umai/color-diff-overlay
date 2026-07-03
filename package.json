@@ -1,0 +1,44 @@
+{
+  "name": "color-diff-overlay",
+  "version": "1.0.0",
+  "description": "逕ｻ蜒城㍾縺ｭ蜷医ｏ縺幄牡蟾ｮ繝√ぉ繝・き繝ｼ",
+  "main": "electron-main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64"
+  },
+  "build": {
+    "appId": "local.color-diff-overlay",
+    "productName": "逕ｻ蜒城㍾縺ｭ蜷医ｏ縺幄牡蟾ｮ繝√ぉ繝・き繝ｼ",
+    "directories": {
+      "output": "outputs/electron-build"
+    },
+    "files": [
+      "electron-main.js",
+      "outputs/color-diff-overlay.html",
+      "outputs/utif.js"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "逕ｻ蜒城㍾縺ｭ蜷医ｏ縺幄牡蟾ｮ繝√ぉ繝・き繝ｼ-${version}.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "utif": "^3.1.0"
+  }
+}
